@@ -148,6 +148,10 @@ build step at all.
 npm i ts7-i18n     # or: pnpm add ts7-i18n / yarn add ts7-i18n / bun add ts7-i18n
 ```
 
+> **Use 1.1.1 or newer.** Every earlier release (0.1.0, 1.0.0, 1.1.0) shipped an
+> `exports` map pointing at `./src/*.ts`, which isn't in the tarball — importing
+> them fails with `ERR_MODULE_NOT_FOUND`. Those versions are deprecated on npm.
+
 React is an **optional** peer dependency — needed only for the `ts7-i18n/react`
 entry point. The registry half has no React import at all.
 

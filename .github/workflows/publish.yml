@@ -41,6 +41,40 @@ jobs:
             exit 1
           fi
 
-      - run: npm publish --provenance --access public
+      # Verify the tarball resolves before it is published, not after. `exports`
+      # in the repo points at ./src/*.ts (so the monorepo this is developed in
+      # can consume TypeScript directly); `publishConfig.exports` rewrites those
+      # to ./dist/*.js for the published package. Only pnpm applies
+      # publishConfig — npm ignores it — so packing with npm ships an `exports`
+      # map pointing at .ts files that aren't in the tarball, and every consumer
+      # gets ERR_MODULE_NOT_FOUND. This guard fails the release instead.
+      - name: Verify the packed tarball actually imports
+        run: |
+          set -e
+          pnpm pack --pack-destination /tmp/pack
+          mkdir -p /tmp/smoke && cd /tmp/smoke
+          npm init -y >/dev/null
+          npm install /tmp/pack/*.tgz >/dev/null
+          node -e "
+            const p = require('./node_modules/ts7-i18n/package.json');
+            const main = p.exports['.'].default;
+            if (main.includes('/src/')) {
+              console.error('::error::published exports still point at ./src — publishConfig was not applied');
+              process.exit(1);
+            }
+          "
+          node --input-type=module -e "
+            import { createTranslationRegistry } from 'ts7-i18n/registry';
+            const LL = createTranslationRegistry({ en: { hi: 'Hi {name}' } }).getTranslations('en');
+            if (LL.hi({ name: 'x' }) !== 'Hi x') { console.error('::error::smoke test produced wrong output'); process.exit(1); }
+            console.log('tarball imports and renders correctly');
+          "
+
+      # `pnpm publish`, not `npm publish` — see the note above; npm would ship
+      # the unrewritten exports map. Auth still comes from the .npmrc that
+      # setup-node's `registry-url` writes, which pnpm reads too, so
+      # NODE_AUTH_TOKEN is all that's needed. `--no-git-checks` because the
+      # release tag means HEAD is detached, which pnpm otherwise refuses.
+      - run: pnpm publish --provenance --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
