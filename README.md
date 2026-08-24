@@ -15,6 +15,11 @@
 
 ---
 
+**Jump to:** [Why this exists](#why-this-exists) · [How it compares](#how-it-compares) ·
+[Install](#install) · [Quick start](#quick-start) ·
+[Migrating from typesafe-i18n](#migrating-from-typesafe-i18n) · [Plurals](#plurals) ·
+[API](#api)
+
 Your translation strings *are* the types. Parameters are read straight off the
 string literal — at compile time, with nothing to generate and nothing to keep
 in sync.
@@ -67,6 +72,42 @@ touching it — template-literal types plus a small runtime tree-walker.
 It also dogfoods its own advice: `isolatedDeclarations: true` from day one, so
 its `.d.ts` emission works identically under `tsc`, `tsgo`, or `oxc` — proof,
 not a claim, that "TS7-native" is achievable.
+
+## How it compares
+
+Widening the lens past typesafe-i18n — how ts7-i18n stacks up against the rest
+of the React/TS i18n field. Bundle sizes are min+gzip, pulled from
+[Bundlephobia](https://bundlephobia.com) for each package's own runtime import
+(not the npm tarball, which for several of these includes a CLI or codegen
+tool that never ships to the browser — `typesafe-i18n`'s tarball is 2.8 MB,
+almost all of it its code generator, while its actual runtime is 1.3 KB).
+
+| | [next-intl](https://next-intl.dev) | [react-i18next](https://react.i18next.com) + i18next | [react-intl](https://formatjs.io/docs/react-intl/) (FormatJS) | [Lingui](https://lingui.dev) | [Paraglide JS](https://paraglidejs.com) | typesafe-i18n | **ts7-i18n** |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Runtime size (gzip) | 12.9 KB | 10.2 + 13.7 KB | 14.7 KB | 1.7 + 2.0 KB | scales with usage — no fixed runtime import | 1.3 KB | **~2 KB** |
+| Typed params | manual `.d.ts`, or an optional plugin for arguments specifically | manual `.d.ts`, or a community codegen tool | none built in | compile-time macro + CLI extraction | compiles each message to a typed function | CLI-generated | **read straight off the string literal** |
+| Needs a build/CLI step for types | optional | optional | — | required (extract + compile) | required (its whole architecture is the compiler) | required (`postinstall`) | **none, ever** |
+| Framework | Next.js only | React (wrappers exist for others) | React only | React, Vue, Solid, Svelte, Node | any (Vite-based) | any | any (React is an *optional* peer) |
+| Runtime deps | 8 (the FormatJS/ICU stack) | 3, plus i18next itself | 5 (the FormatJS/ICU stack) | ~5 | 0 shipped — output is plain functions | 0 | **0** |
+
+**On "runs on TypeScript 7":** only typesafe-i18n's breakage is something I
+independently verified — it's what this package exists to fix, and the
+upstream issue is linked above. I have not tested the others under TS7 and
+won't guess; Lingui (Babel-based) and Paraglide (its own compiler) don't
+obviously depend on the TypeScript Compiler API the way typesafe-i18n's CLI
+does, so they may well be unaffected. ts7-i18n's actual claim is narrower and
+structural, not "everyone else is broken": its type safety comes entirely
+from TypeScript's own template-literal type system — a language feature, not
+a library's API surface into the compiler — so there is nothing in that
+mechanism *for* a future TypeScript release to break.
+
+The "typed params" row is the more useful takeaway on its own: everyone
+else's type safety is bolted on — a hand-maintained `.d.ts`, an optional
+plugin, a macro + CLI, or a full compiler. ts7-i18n and Paraglide are the two
+that don't need any of that, via two different mechanisms — Paraglide
+compiles your messages ahead of time into functions; ts7-i18n reads the
+parameter names straight off the string literal type at compile time, no
+build step at all.
 
 ## Install
 
@@ -124,6 +165,46 @@ LL.common.save(); // "Save" — no args allowed, and TS enforces that
 LL.common.greet({ name: "Kelly" }); // "Hi Kelly" — `name` is required and typed
 ```
 
+
+## Migrating from typesafe-i18n
+
+The diff is smaller than it looks, because your translation *strings* don't
+change at all — `{param}` placeholders and `{{…}}` plural blocks port over
+verbatim. What changes is how each file gets its types:
+
+1. **Drop the package and its `postinstall` step.** Remove `typesafe-i18n`
+   from `package.json`, and the `typesafe-i18n --no-watch` script that
+   generates `i18n-types.ts`.
+2. **Delete the generated `i18n-types.ts`, replace it with a hand-written
+   one** — a handful of lines, not thousands:
+   ```ts
+   import type { LL } from "ts7-i18n";
+   import type { BaseTranslation } from "./en";
+
+   export type Locales = "en" | "zh-CN"; // | whatever you support
+   export type TranslationFunctions = LL<BaseTranslation>;
+   ```
+3. **Base locale: add `as const`.** Every module in your base locale (and the
+   file that spreads them together) needs `as const` on the object literal —
+   that's the entire change to your existing translation files:
+   ```diff
+    export const common = {
+      save: "Save",
+   -};
+   +} as const;
+   ```
+4. **Other locales: swap the codegen'd type for `satisfies Translatable<Base>`.**
+   Where typesafe-i18n gave you `BaseTranslation` from the generated file,
+   import `Translatable` from `ts7-i18n` instead and use `satisfies` — same
+   compile-time key-parity guarantee, no generated file behind it.
+5. **Swap `i18n-react.tsx` for `createTypedI18n`** (or the split
+   `ts7-i18n/registry` + `ts7-i18n/react` entry points if you're on Next.js
+   App Router — see [Server Components](#server-components-nextjs-app-router)
+   below).
+
+That's the whole migration. No formatters and no full ICU plural syntax are
+the two things you'd be giving up — see the [comparison table](#how-it-compares)
+above for whether that matters for your project.
 ## Plurals
 
 typesafe-i18n's `{{…}}` plural shorthand is supported as-is, so strings port

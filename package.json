@@ -13,7 +13,7 @@
     "nextjs",
     "no-codegen"
   ],
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": false,
   "license": "MIT",
   "homepage": "https://github.com/mr-kelly/ts7-i18n",
