@@ -20,13 +20,25 @@ export interface I18nReactBindingsOptions<Locale extends string, T extends objec
   loadLocale?: (locale: Locale) => Promise<Translatable<T>>;
 }
 
+export interface ProviderProps<Locale extends string, T extends object> {
+  locale: Locale;
+  /** The tree for `locale`, when the caller already has it (see `Provider`). */
+  translations?: Translatable<T>;
+  children: ReactNode;
+}
+
 export interface I18nReactBindings<Locale extends string, T extends object> {
   /**
    * Wraps `children` with the resolved `LL` accessor for `locale`. Suspends
    * while `locale` loads when the bindings have a `loadLocale`; throws if
    * `locale` is not loaded and there is no loader.
+   *
+   * Pass `translations` when the server already holds the tree (a Next.js
+   * layout that awaited it): it is registered during render, so the first
+   * render — and hydration — never waits on a chunk. The loader then only
+   * serves locales the client switches to later.
    */
-  Provider: (props: { locale: Locale; children: ReactNode }) => ReactNode;
+  Provider: (props: ProviderProps<Locale, T>) => ReactNode;
   /** Reads `{ locale, LL }` from the nearest `Provider`. Throws if called outside one. */
   useI18nContext: () => I18nContextValue<Locale, T>;
   /**
@@ -154,7 +166,11 @@ export function createI18nReactBindings<Locale extends string, T extends object>
     return useMemo(() => registry.getTranslations(locale), [locale, registry.getTranslations]);
   }
 
-  function Provider({ locale, children }: { locale: Locale; children: ReactNode }): ReactNode {
+  function Provider({ locale, translations, children }: ProviderProps<Locale, T>): ReactNode {
+    // Registering during render is idempotent (first write wins) and has to
+    // happen before `useTranslations` checks the registry — that ordering is
+    // what keeps a server-supplied tree from suspending hydration.
+    if (translations && !registry.isLocaleLoaded(locale)) registry.loadLocale(locale, translations);
     const LL = useTranslations(locale);
     return <Context.Provider value={{ locale, LL }}>{children}</Context.Provider>;
   }

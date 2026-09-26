@@ -97,6 +97,27 @@ describe("createI18nReactBindings — on-demand locales", () => {
     expect(registry.isLocaleLoaded("ja")).toBe(true);
   });
 
+  it("renders a server-supplied tree on the first render, without the loader", () => {
+    // What keeps hydration from waiting on a chunk: the Next.js layout already
+    // awaited the tree and hands it to the Provider.
+    const registry = createTranslationRegistry<Locale, BaseTranslation>();
+    const loader = manualLoader();
+    const { Provider, useI18nContext } = createI18nReactBindings(registry, {
+      loadLocale: loader.loadLocale,
+    });
+    function Greet() {
+      return <div data-testid="greet">{useI18nContext().LL.common.greet({ name: "Kelly" })}</div>;
+    }
+
+    render(
+      <Provider locale="ja" translations={trees.ja}>
+        <Greet />
+      </Provider>,
+    );
+    expect(screen.getByTestId("greet").textContent).toBe("こんにちは Kelly");
+    expect(loader.loadLocale).not.toHaveBeenCalled();
+  });
+
   it("does not call the loader for a locale that is already loaded", () => {
     const registry = createTranslationRegistry<Locale, BaseTranslation>({ en: trees.en });
     const loader = manualLoader();

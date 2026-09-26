@@ -6,6 +6,7 @@ export type {
   I18nReactBindings,
   I18nReactBindingsOptions,
   LocaleLoader,
+  ProviderProps,
 } from "./react";
 export { createI18nReactBindings, createLocaleLoader } from "./react";
 export type { TranslationRegistry } from "./registry";

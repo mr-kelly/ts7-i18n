@@ -292,6 +292,20 @@ const localeLoaders = {
 - Don't also import the locale files statically from client code — one static
   import pulls that tree back into the main bundle.
 
+**If the server already has the tree, pass it in.** A Next.js layout that
+awaited the locale can hand it to the Provider, which registers it during
+render — so the first render, and hydration, never wait on a chunk (anything
+the user typed before hydration would otherwise be wiped when React takes
+over controlled inputs). The loader then only serves locales the client
+switches to:
+
+```tsx
+// app/[lang]/layout.tsx (Server Component)
+<Provider locale={lang} translations={await importLocaleAsync(lang)}>
+  {children}
+</Provider>
+```
+
 The same suspend-until-loaded mechanism is exported on its own as
 `createLocaleLoader(load)` → `{ read(locale), prime(locale, value) }`, for per-locale data that isn't
 a translation tree (a shared package's message catalog, say).
@@ -378,7 +392,7 @@ If you'd like your own package to pick up the same TS7-friendly settings
 
 - `createTypedI18n<Locale, T>(initialTranslations?, { loadLocale? })` (root import) → `{ Provider, useI18nContext, useTranslations, loadLocale, isLocaleLoaded, getTranslations }`
 - `ts7-i18n/registry`: `createTranslationRegistry<Locale, T>(initialTranslations?)` → `{ loadLocale, isLocaleLoaded, getTranslations }` — zero `react` import
-- `ts7-i18n/react`: `createI18nReactBindings(registry, { loadLocale? })` → `{ Provider, useI18nContext, useTranslations }` — `"use client"`; with `loadLocale`, unloaded locales suspend instead of throwing
+- `ts7-i18n/react`: `createI18nReactBindings(registry, { loadLocale? })` → `{ Provider, useI18nContext, useTranslations }` (`Provider` takes an optional server-supplied `translations`) — `"use client"`; with `loadLocale`, unloaded locales suspend instead of throwing
 - `ts7-i18n/react`: `createLocaleLoader(load)` → `{ read(locale), prime(locale, value) }` — the suspend-until-loaded primitive on its own
 - `interpolate(template, params?, locale?)` — the substitution primitive the registry uses internally (also exported from `ts7-i18n/registry`)
 - `assertLocaleParamParity(base, locales)` / `collectParams(tree)` — the runtime param-parity check
